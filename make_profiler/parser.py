@@ -124,3 +124,52 @@ def get_dependencies_influences(ast):
             recurse_indirect_influences(original_target, t)
 
     return dependencies, influences, order_only, indirect_influences
+
+if __name__ == '__main__':
+    import unittest as ut
+    import io
+
+    class ParserTests(ut.TestCase):
+        Makefile_easy = \
+r'''app.exe: file.o
+	gcc -o app.exe file.o
+appd.exe: filed.o
+	GCC = gcc -g
+	$(GCC) -o appd.exe filed.o
+	echo "built debug"'''
+
+        tok = io.StringIO()
+        def use(self, makestring):
+            self.tok = tokenizer(io.StringIO(makestring))
+
+        def assertNext(self, type_, line):
+            tp, ln = next(self.tok)
+            self.assertEqual(tp, type_)
+            self.assertEqual(ln, line)
+
+        def test_tokenizer_easy(self):
+            self.use(self.Makefile_easy)
+
+            self.assertNext(Tokens.target,  'app.exe: file.o')
+            self.assertNext(Tokens.command, 'gcc -o app.exe file.o')
+            self.assertNext(Tokens.target,  'appd.exe: filed.o')
+            self.assertNext(Tokens.command, 'GCC = gcc -g')
+            self.assertNext(Tokens.command, '$(GCC) -o appd.exe filed.o')
+            self.assertNext(Tokens.command, 'echo "built debug"')
+
+        def test_parse_easy(self):
+            tok = io.StringIO(self.Makefile_easy)
+            (_, app), (_, appd) = parse(tok)
+
+            self.assertEqual(app['target'], 'app.exe')
+            self.assertEqual(appd['target'], 'appd.exe')
+
+            self.assertEqual(app['deps'], [['file.o'], []])
+            self.assertEqual(appd['deps'], [['filed.o'], []])
+
+            self.assertEqual(app['body'], [('command', 'gcc -o app.exe file.o')])
+            self.assertEqual(appd['body'], [('command', 'GCC = gcc -g'),
+                ('command', '$(GCC) -o appd.exe filed.o'),
+                ('command', 'echo "built debug"')])
+
+    ut.main()

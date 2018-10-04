@@ -9,20 +9,18 @@ class Tokens:
     command = 'command'
     expression = 'expression'
 
+def glue_multiline(it, line):
+    lines = []
+    strip_line = line.strip()
+    while strip_line[-1] == '\\':
+        lines.append(strip_line.rstrip('\\').strip())
+        line_num, line = next(it)
+        strip_line = line.strip()
+    lines.append(strip_line.rstrip('\\').strip())
+    return ' '.join(lines)
 
 def tokenizer(fd):
     it = enumerate(fd)
-
-    def glue_multiline(line):
-        lines = []
-        strip_line = line.strip()
-        while strip_line[-1] == '\\':
-            lines.append(strip_line.rstrip('\\').strip())
-            line_num, line = next(it)
-            strip_line = line.strip()
-        lines.append(strip_line.rstrip('\\').strip())
-        return ' '.join(lines)
-
     for line_num, line in it:
         strip_line = line.strip()
 
@@ -33,12 +31,13 @@ def tokenizer(fd):
         # skip comments, don't skip docstrings
         if strip_line[0] == '#' and line[:2] != '##':
             continue
-        elif line[0] == '\t':
-            yield (Tokens.command, glue_multiline(line))
+
+        if line[0] == '\t':
+            yield (Tokens.command, glue_multiline(it, line))
         elif ':' in line and '=' not in line:
-            yield (Tokens.target, glue_multiline(line))
+            yield (Tokens.target, glue_multiline(it, line))
         else:
-            yield (Tokens.expression, line.strip(' ;\t'))
+            yield (Tokens.expression, line.strip(' ;\t\n'))
 
 
 def parse(fd):
@@ -48,7 +47,7 @@ def parse(fd):
     def parse_target(token):
         line = token[1]
         target, deps, order_deps, docstring = re.match(
-            '(.+): \s? ([^|#]+)? \s? [|]? \s? ([^##]+)? \s?  \s? ([#][#].+)?',
+            r'(.+): \s? ([^|#]+)? \s? [|]? \s? ([^##]+)? \s?  \s? ([#][#].+)?',
             line,
             re.X
         ).groups()
@@ -177,6 +176,26 @@ clean:
 	rm *.o
 	rm *.exe
 #.PHONY : build'''
+
+        def test_glue(self):
+            ss = enumerate(io.StringIO( \
+r'''	gcc \
+	-o app.exe \
+	-c file.cpp'''))
+            _,s = next(ss)
+            self.assertEqual(glue_multiline(ss, s), 'gcc -o app.exe -c file.cpp')
+
+            ss = enumerate(io.StringIO( \
+r'''	gcc a.cpp; echo \\
+	echo b \\\\
+	echo c \\\
+	echo d'''))
+            _,s = next(ss)
+            self.assertEqual(glue_multiline(ss, s), r'gcc a.cpp; echo \\')
+            _,s = next(ss)
+            self.assertEqual(glue_multiline(ss, s), r'echo b \\\\')
+            _,s = next(ss)
+            self.assertEqual(glue_multiline(ss, s), r'echo c \\ echo d')
 
         def test_comments(self):
             ss = io.StringIO(\

@@ -9,19 +9,50 @@ class Tokens:
     command = 'command'
     expression = 'expression'
 
-def glue_multiline(it, line):
+def count_sequenced(seq, x):
+    """
+    >>> count_sequenced('aaabc','a')
+    3
+    >>> count_sequenced('aaabc', 'b')
+    0
+    """
+    cnt=0
+    for s in seq:
+        if s != x:
+            break
+        cnt += 1
+    return cnt
+
+def is_odd(x):
+    """
+    >>> is_odd(2) == !is_odd(1)
+    True
+    """
+    return x & 1 == 1
+
+def continued(strip_line):
+    r"""
+    >>> continued("abcd \\")
+    True
+    >>> continued("abcd \\\\")
+    False
+    >>> continued("abcd")
+    False
+    """
+    cs = count_sequenced(reversed(strip_line), '\\')
+    return cs > 0 and is_odd(cs)
+
+def glue_multiline(fd, firstline):
     lines = []
-    strip_line = line.strip()
-    while strip_line[-1] == '\\':
-        lines.append(strip_line.rstrip('\\').strip())
-        line_num, line = next(it)
-        strip_line = line.strip()
-    lines.append(strip_line.rstrip('\\').strip())
+    strip_line = firstline.strip()
+    while continued(strip_line):
+        lines.append(strip_line[:-1].strip())
+        strip_line = next(fd).strip()
+    lines.append(strip_line)
     return ' '.join(lines)
 
 def tokenizer(fd):
-    it = enumerate(fd)
-    for line_num, line in it:
+    for line in fd:
         strip_line = line.strip()
 
         # skip empty lines
@@ -33,9 +64,9 @@ def tokenizer(fd):
             continue
 
         if line[0] == '\t':
-            yield (Tokens.command, glue_multiline(it, line))
+            yield (Tokens.command, glue_multiline(fd, line))
         elif ':' in line and '=' not in line:
-            yield (Tokens.target, glue_multiline(it, line))
+            yield (Tokens.target, glue_multiline(fd, line))
         else:
             yield (Tokens.expression, line.strip(' ;\t\n'))
 
@@ -178,23 +209,23 @@ clean:
 #.PHONY : build'''
 
         def test_glue(self):
-            ss = enumerate(io.StringIO( \
+            ss = io.StringIO( \
 r'''	gcc \
 	-o app.exe \
-	-c file.cpp'''))
-            _,s = next(ss)
+	-c file.cpp''')
+            s = next(ss)
             self.assertEqual(glue_multiline(ss, s), 'gcc -o app.exe -c file.cpp')
 
-            ss = enumerate(io.StringIO( \
+            ss = io.StringIO( \
 r'''	gcc a.cpp; echo \\
 	echo b \\\\
 	echo c \\\
-	echo d'''))
-            _,s = next(ss)
+	echo d''')
+            s = next(ss)
             self.assertEqual(glue_multiline(ss, s), r'gcc a.cpp; echo \\')
-            _,s = next(ss)
+            s = next(ss)
             self.assertEqual(glue_multiline(ss, s), r'echo b \\\\')
-            _,s = next(ss)
+            s = next(ss)
             self.assertEqual(glue_multiline(ss, s), r'echo c \\ echo d')
 
         def test_comments(self):

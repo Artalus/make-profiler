@@ -1,55 +1,9 @@
 import unittest as ut
 import io
 from make_profiler.parser import *
+import makefile_provider as mf
 
 class ParserTests(ut.TestCase):
-    Makefile_easy = \
-r'''app.exe: file.o
-	gcc -o app.exe file.o
-appd.exe: filed.o
-	GCC = gcc -g
-	$(GCC) -o appd.exe filed.o
-	echo "built debug"'''
-    Makefile_medium = Makefile_easy + \
-r'''
-
-ifdef debug
-build: appd.exe
-else
-build: app.exe
-endif'''
-    Makefile_hard = \
-r'''all: build
-
-export X=1
-export Y=2
-
-Z=3
-
-app.exe: file.o
-	gcc -o \
-	app.exe \
-	file.o
-appd.exe: file.o
-	gcc -o app.exe file.o
-
-file.o: file.cpp
-	gcc -c file.cpp -o file.o
-
-ifdef debug
-ifeq ($(debug),1)
-build: appd.exe
-else
-build: app.exe
-endif
-else
-build: appd.exe app.exe
-endif
-
-clean:
-rm *.o
-rm *.exe
-#.PHONY : build'''
 
     def test_glue(self):
         ss = io.StringIO( \
@@ -101,7 +55,7 @@ echo d''')
         self.assertEqual(ln, line)
 
     def test_tokenizer_easy(self):
-        self.use(self.Makefile_easy)
+        self.use(mf.easy())
 
         self.assertNext(Tokens.target,  'app.exe: file.o')
         self.assertNext(Tokens.command, 'gcc -o app.exe file.o')
@@ -111,7 +65,7 @@ echo d''')
         self.assertNext(Tokens.command, 'echo "built debug"')
 
     def test_tokenizer_medium(self):
-        self.use(self.Makefile_medium)
+        self.use(mf.medium())
         self.skip(6)
         self.assertNext(Tokens.expression, 'ifdef debug')
         self.assertNext(Tokens.target, 'build: appd.exe')
@@ -120,7 +74,7 @@ echo d''')
         self.assertNext(Tokens.expression, 'endif')
 
     def test_tokenizer_hard(self):
-        self.use(self.Makefile_hard)
+        self.use(mf.hard())
         self.skip(2)
 
         self.assertNext(Tokens.expression, 'export Y=2')
@@ -129,7 +83,7 @@ echo d''')
         self.assertNext(Tokens.command, 'gcc -o app.exe file.o')
 
     def test_parse_easy(self):
-        tok = io.StringIO(self.Makefile_easy)
+        tok = io.StringIO(mf.easy())
         app, appd = parse(tok)
         _,app = app
         _,appd = appd

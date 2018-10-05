@@ -1,0 +1,12 @@
+language: python
+env:
+  - PYTHONPATH=`pwd`:$PYTHONPATH
+python:
+  - "3.4"
+  - "3.7-dev"
+install:
+  - pip install -r requirements.txt
+  - pip install pytest
+script:
+  - pytest # not all pytests allow --doctest-module
+  - shopt -s globstar extglob; python -m doctest make_profiler/**/!(__*).py
